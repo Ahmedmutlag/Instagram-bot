@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Env files (never commit real secrets)
+.env
+.env.local
+.env.test
+.env.*.local
+!.env.example
+
+# Backend
+backend/dist/
+backend/*.tsbuildinfo
+
+# Next.js
+admin/.next/
+admin/out/
+admin/*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS/editor
+.DS_Store
+.vscode/
+.idea/
+
+# Test/coverage
+coverage/
+
+# Local Redis snapshot (created by ad-hoc local redis-server runs)
+dump.rdb

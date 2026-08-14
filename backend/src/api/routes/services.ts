@@ -1,0 +1,73 @@
+import { Router } from "express";
+import { z } from "zod";
+import { asyncHandler } from "../middleware/errorHandler";
+import { validateBody, validateQuery } from "../middleware/validate";
+import { AuthedRequest } from "../middleware/auth";
+import { paginationSchema, paginationMeta } from "../pagination";
+import * as serviceCatalog from "../../services/serviceCatalogService";
+import { recordAudit } from "../../services/auditService";
+
+export const servicesRouter = Router();
+
+const listQuerySchema = paginationSchema.extend({
+  status: z.enum(["ACTIVE", "INACTIVE"]).optional(),
+  category: z.string().optional(),
+});
+
+servicesRouter.get(
+  "/",
+  validateQuery(listQuerySchema),
+  asyncHandler(async (req, res) => {
+    const { page, limit, status, category } = req.query as unknown as z.infer<typeof listQuerySchema>;
+    const { items, total } = await serviceCatalog.listServices({ page, limit, status, category });
+    res.json({ data: items, meta: paginationMeta(page, limit, total) });
+  })
+);
+
+servicesRouter.get(
+  "/:id",
+  asyncHandler(async (req, res) => {
+    res.json({ data: await serviceCatalog.getServiceById(req.params.id) });
+  })
+);
+
+const serviceSchema = z.object({
+  name: z.string().min(1),
+  description: z.string().optional(),
+  category: z.string().optional(),
+  providerId: z.string().min(1),
+  providerServiceId: z.string().min(1),
+  price: z.number().positive(),
+  minQuantity: z.number().int().positive(),
+  maxQuantity: z.number().int().positive(),
+  status: z.enum(["ACTIVE", "INACTIVE"]).optional(),
+});
+
+servicesRouter.post(
+  "/",
+  validateBody(serviceSchema),
+  asyncHandler(async (req: AuthedRequest, res) => {
+    const service = await serviceCatalog.createService(req.body);
+    await recordAudit({ adminId: req.admin!.adminId, action: "SERVICE_CREATE", entityType: "Service", entityId: service.id, newValue: req.body, ipAddress: req.ip });
+    res.status(201).json({ data: service });
+  })
+);
+
+servicesRouter.patch(
+  "/:id",
+  validateBody(serviceSchema.partial()),
+  asyncHandler(async (req: AuthedRequest, res) => {
+    const service = await serviceCatalog.updateService(req.params.id, req.body);
+    await recordAudit({ adminId: req.admin!.adminId, action: "SERVICE_UPDATE", entityType: "Service", entityId: service.id, newValue: req.body, ipAddress: req.ip });
+    res.json({ data: service });
+  })
+);
+
+servicesRouter.delete(
+  "/:id",
+  asyncHandler(async (req: AuthedRequest, res) => {
+    await serviceCatalog.deleteService(req.params.id);
+    await recordAudit({ adminId: req.admin!.adminId, action: "SERVICE_DELETE", entityType: "Service", entityId: req.params.id, ipAddress: req.ip });
+    res.status(204).send();
+  })
+);

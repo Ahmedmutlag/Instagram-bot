@@ -1,0 +1,315 @@
+// Prisma schema for the SMM Reseller Telegram Bot platform
+// Run `npx prisma migrate dev` to create migrations locally,
+// or `npx prisma migrate deploy` to apply them in production/Docker.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum AdminRole {
+  SUPER_ADMIN
+  ADMIN
+  SUPPORT
+}
+
+enum ProviderStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum ServiceStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum OrderStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  PARTIAL
+  CANCELED
+  FAILED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  CANCELED
+}
+
+enum BalanceTransactionType {
+  DEPOSIT
+  ORDER_PAYMENT
+  REFUND
+  ADMIN_ADJUSTMENT
+  REFERRAL_BONUS
+}
+
+enum CouponType {
+  PERCENTAGE
+  FIXED
+}
+
+enum ReferralEarningStatus {
+  PENDING
+  CREDITED
+}
+
+// ---------------------------------------------------------------------------
+// Core entities
+// ---------------------------------------------------------------------------
+
+model User {
+  id             String   @id @default(cuid())
+  telegramId     BigInt   @unique
+  username       String?
+  firstName      String?
+  lastName       String?
+  languageCode   String   @default("ar")
+  balance        Decimal  @default(0) @db.Decimal(14, 4)
+  isBanned       Boolean  @default(false)
+  referralCode   String   @unique
+  referredById   String?
+  referredBy     User?    @relation("UserReferrals", fields: [referredById], references: [id])
+  referrals      User[]   @relation("UserReferrals")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  orders              Order[]
+  balanceTransactions BalanceTransaction[]
+  payments            Payment[]
+  couponUsages        CouponUsage[]
+  referralEarningsMade     ReferralEarning[] @relation("ReferrerEarnings")
+  referralEarningsReceived ReferralEarning[] @relation("ReferredUserEarnings")
+
+  @@index([isBanned])
+  @@index([createdAt])
+}
+
+model Admin {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  name         String
+  role         AdminRole @default(ADMIN)
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  auditLogs AuditLog[]
+
+  @@index([role])
+}
+
+model Provider {
+  id               String         @id @default(cuid())
+  name             String
+  apiUrl           String
+  apiKeyEncrypted  String
+  adapterType      String         @default("generic_smm_api")
+  status           ProviderStatus @default(ACTIVE)
+  notes            String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  providerServices ProviderService[]
+  services         Service[]
+  orders           Order[]
+
+  @@index([status])
+}
+
+model ProviderService {
+  id                 String   @id @default(cuid())
+  providerId         String
+  provider           Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  externalServiceId  String
+  name               String
+  category           String?
+  costPrice          Decimal  @db.Decimal(14, 4)
+  minQuantity        Int
+  maxQuantity        Int
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  services Service[]
+
+  @@unique([providerId, externalServiceId])
+  @@index([providerId])
+}
+
+model Service {
+  id                String        @id @default(cuid())
+  name              String
+  description       String?
+  category          String?
+  providerId        String
+  provider          Provider      @relation(fields: [providerId], references: [id])
+  providerServiceId String
+  providerService   ProviderService @relation(fields: [providerServiceId], references: [id])
+  price             Decimal       @db.Decimal(14, 4)
+  minQuantity       Int
+  maxQuantity       Int
+  status            ServiceStatus @default(ACTIVE)
+  sortOrder         Int           @default(0)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  orders Order[]
+
+  @@index([status])
+  @@index([providerId])
+  @@index([providerServiceId])
+}
+
+model Order {
+  id              String      @id @default(cuid())
+  orderNumber     String      @unique
+  userId          String
+  user            User        @relation(fields: [userId], references: [id])
+  serviceId       String
+  service         Service     @relation(fields: [serviceId], references: [id])
+  providerId      String
+  provider        Provider    @relation(fields: [providerId], references: [id])
+  providerOrderId String?
+  link            String
+  quantity        Int
+  price           Decimal     @db.Decimal(14, 4)
+  cost            Decimal     @db.Decimal(14, 4)
+  profit          Decimal     @db.Decimal(14, 4)
+  status          OrderStatus @default(PENDING)
+  startCount      Int?
+  remains         Int?
+  errorMessage    String?
+  retryCount      Int         @default(0)
+  couponCode      String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  couponUsage       CouponUsage?
+  referralEarning   ReferralEarning?
+
+  @@index([userId])
+  @@index([status])
+  @@index([providerId])
+  @@index([createdAt])
+}
+
+model Payment {
+  id          String        @id @default(cuid())
+  userId      String
+  user        User          @relation(fields: [userId], references: [id])
+  amount      Decimal       @db.Decimal(14, 4)
+  currency    String        @default("USD")
+  method      String
+  status      PaymentStatus @default(PENDING)
+  providerRef String?
+  metadata    Json?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model BalanceTransaction {
+  id             String                 @id @default(cuid())
+  userId         String
+  user           User                   @relation(fields: [userId], references: [id])
+  type           BalanceTransactionType
+  amount         Decimal                @db.Decimal(14, 4)
+  balanceBefore  Decimal                @db.Decimal(14, 4)
+  balanceAfter   Decimal                @db.Decimal(14, 4)
+  referenceId    String?
+  description    String?
+  createdAt      DateTime               @default(now())
+
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+model Coupon {
+  id             String     @id @default(cuid())
+  code           String     @unique
+  type           CouponType
+  value          Decimal    @db.Decimal(14, 4)
+  maxUses        Int?
+  usedCount      Int        @default(0)
+  minOrderAmount Decimal?   @db.Decimal(14, 4)
+  expiresAt      DateTime?
+  isActive       Boolean    @default(true)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  usages CouponUsage[]
+
+  @@index([isActive])
+}
+
+model CouponUsage {
+  id             String   @id @default(cuid())
+  couponId       String
+  coupon         Coupon   @relation(fields: [couponId], references: [id])
+  userId         String
+  user           User     @relation(fields: [userId], references: [id])
+  orderId        String?  @unique
+  order          Order?   @relation(fields: [orderId], references: [id])
+  discountAmount Decimal  @db.Decimal(14, 4)
+  createdAt      DateTime @default(now())
+
+  @@index([couponId])
+  @@index([userId])
+}
+
+model ReferralEarning {
+  id               String                 @id @default(cuid())
+  referrerId       String
+  referrer         User                   @relation("ReferrerEarnings", fields: [referrerId], references: [id])
+  referredUserId   String
+  referredUser     User                   @relation("ReferredUserEarnings", fields: [referredUserId], references: [id])
+  orderId          String?                @unique
+  order            Order?                 @relation(fields: [orderId], references: [id])
+  amount           Decimal                @db.Decimal(14, 4)
+  status           ReferralEarningStatus  @default(PENDING)
+  createdAt        DateTime               @default(now())
+
+  @@index([referrerId])
+  @@index([referredUserId])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  adminId    String?
+  admin      Admin?   @relation(fields: [adminId], references: [id])
+  action     String
+  entityType String
+  entityId   String?
+  oldValue   Json?
+  newValue   Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([adminId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+model Setting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+}
