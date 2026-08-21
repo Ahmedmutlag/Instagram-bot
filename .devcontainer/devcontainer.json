@@ -1,0 +1,14 @@
+{
+  "name": "SMM Reseller Bot (Docker Compose)",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-22.04",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "forwardPorts": [3000, 4000],
+  "portsAttributes": {
+    "3000": { "label": "لوحة الإدارة (Admin Dashboard)", "onAutoForward": "notify" },
+    "4000": { "label": "Backend API", "onAutoForward": "silent" }
+  },
+  "postCreateCommand": "cp -n .env.example .env || true",
+  "postAttachCommand": "echo '✅ الجلسة جاهزة. عدّل ملف .env بالقيم المطلوبة (خصوصاً TELEGRAM_BOT_TOKEN و JWT_SECRET و ENCRYPTION_KEY)، ثم شغّل: docker compose up --build'"
+}

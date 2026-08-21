@@ -82,6 +82,20 @@ interface PaymentGateway {
 | `payment-verify` | التحقق الدوري من حالة عمليات الإيداع المعلقة (حتى 10 محاولات) |
 | `notification` | إرسال إشعارات تيليجرام للمستخدم عند تغيّر حالة الطلب أو الدفع |
 
+## التشغيل من الجوال بدون كمبيوتر (GitHub Codespaces)
+
+إذا ما عندك كمبيوتر أو Docker مثبت، تقدر تشغّل المشروع بالكامل من متصفح الجوال مجاناً عبر **GitHub Codespaces**:
+
+1. افتح المستودع على GitHub من متصفح الجوال.
+2. اضغط على الزر الأخضر **Code** ← تبويب **Codespaces** ← **Create codespace on main**.
+3. انتظر حتى تفتح بيئة تطوير كاملة داخل المتصفح (فيها Docker جاهز تلقائياً).
+4. من الطرفية (Terminal) بالأسفل، عدّل ملف `.env` (تم إنشاؤه تلقائياً من `.env.example`) وحط فيه `TELEGRAM_BOT_TOKEN` الخاص بك و`JWT_SECRET` و`ENCRYPTION_KEY` (نفّذ `openssl rand -hex 32` لتوليد الأخير).
+5. نفّذ:
+   ```bash
+   docker compose up --build
+   ```
+6. البوت راح يشتغل فوراً على تيليجرام. ولوحة الإدارة تفتح تلقائياً بنافذة منبثقة (Codespaces يعمل Port Forwarding للمنفذ 3000 تلقائياً).
+
 ## التشغيل السريع عبر Docker
 
 1. انسخ ملف البيئة وعدّل القيم (خصوصاً `TELEGRAM_BOT_TOKEN` و `JWT_SECRET` و `ENCRYPTION_KEY`):
