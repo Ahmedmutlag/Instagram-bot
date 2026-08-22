@@ -3,7 +3,11 @@
 // or `npx prisma migrate deploy` to apply them in production/Docker.
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // "native" covers local/dev machines; the explicit musl target guarantees
+  // the matching engine binary is available in the Alpine-based Docker
+  // images regardless of what environment `prisma generate` ran in.
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
