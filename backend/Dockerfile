@@ -19,6 +19,11 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
+# Prisma's query engine needs libssl on Alpine (musl) to detect the right
+# engine variant; without it, it falls back to a guess and can fail at
+# runtime with permission/engine-resolution errors.
+RUN apk add --no-cache openssl
+
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 backend
 
 COPY package.json package-lock.json* ./
@@ -28,6 +33,11 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+
+# The `backend` user (not root) runs the process below, so it needs write
+# access to node_modules/@prisma/engines — Prisma writes/caches generated
+# engine files there at runtime (e.g. during `prisma migrate deploy`).
+RUN chown -R backend:nodejs /app
 
 USER backend
 
