@@ -40,4 +40,34 @@ describe("admin authentication API", () => {
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body.data)).toBe(true);
   });
+
+  it("changes the admin's own password and allows login with the new one", async () => {
+    await createTestAdmin({ email: "owner4@example.com" });
+    const login = await request(app).post("/api/v1/auth/login").send({ email: "owner4@example.com", password: "Password123!" });
+    const token = login.body.data.token;
+
+    const changeRes = await request(app)
+      .post("/api/v1/auth/change-password")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ currentPassword: "Password123!", newPassword: "NewPassword456!" });
+    expect(changeRes.status).toBe(200);
+
+    const oldLogin = await request(app).post("/api/v1/auth/login").send({ email: "owner4@example.com", password: "Password123!" });
+    expect(oldLogin.status).toBe(401);
+
+    const newLogin = await request(app).post("/api/v1/auth/login").send({ email: "owner4@example.com", password: "NewPassword456!" });
+    expect(newLogin.status).toBe(200);
+  });
+
+  it("rejects a password change with the wrong current password", async () => {
+    await createTestAdmin({ email: "owner5@example.com" });
+    const login = await request(app).post("/api/v1/auth/login").send({ email: "owner5@example.com", password: "Password123!" });
+    const token = login.body.data.token;
+
+    const res = await request(app)
+      .post("/api/v1/auth/change-password")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ currentPassword: "wrong-one", newPassword: "NewPassword456!" });
+    expect(res.status).toBe(401);
+  });
 });

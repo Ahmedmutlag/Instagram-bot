@@ -43,3 +43,13 @@ export async function getAdminById(id: string) {
   if (!admin || !admin.isActive) throw AppError.unauthorized("الحساب غير موجود أو معطل");
   return admin;
 }
+
+export async function changeOwnPassword(adminId: string, currentPassword: string, newPassword: string) {
+  const admin = await getAdminById(adminId);
+  const valid = await bcrypt.compare(currentPassword, admin.passwordHash);
+  if (!valid) {
+    throw AppError.unauthorized("كلمة المرور الحالية غير صحيحة");
+  }
+  const passwordHash = await hashPassword(newPassword);
+  await prisma.admin.update({ where: { id: adminId }, data: { passwordHash } });
+}

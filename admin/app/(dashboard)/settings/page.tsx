@@ -31,12 +31,26 @@ const EMPTY_FORM: SettingsFormState = {
   referralPercent: "",
 };
 
+interface PasswordFormState {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+}
+
+const EMPTY_PASSWORD_FORM: PasswordFormState = {
+  currentPassword: "",
+  newPassword: "",
+  confirmPassword: "",
+};
+
 export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<SettingsFormState>(EMPTY_FORM);
   const [hasStoredToken, setHasStoredToken] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [passwordForm, setPasswordForm] = useState<PasswordFormState>(EMPTY_PASSWORD_FORM);
+  const [changingPassword, setChangingPassword] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -90,6 +104,31 @@ export default function SettingsPage() {
       toast.error(getErrorMessage(err));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function onChangePassword(e: FormEvent) {
+    e.preventDefault();
+    if (passwordForm.newPassword.length < 8) {
+      toast.error("كلمة المرور الجديدة يجب أن تكون 8 أحرف على الأقل");
+      return;
+    }
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      toast.error("كلمة المرور الجديدة وتأكيدها غير متطابقين");
+      return;
+    }
+    setChangingPassword(true);
+    try {
+      await api.post("/auth/change-password", {
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword,
+      });
+      toast.success("تم تغيير كلمة المرور بنجاح");
+      setPasswordForm(EMPTY_PASSWORD_FORM);
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setChangingPassword(false);
     }
   }
 
@@ -184,6 +223,62 @@ export default function SettingsPage() {
           </div>
           <Button type="submit" loading={saving}>
             حفظ التغييرات
+          </Button>
+        </form>
+      )}
+
+      {!loading && !error && (
+        <form
+          onSubmit={onChangePassword}
+          className="mt-6 max-w-2xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
+        >
+          <h2 className="mb-4 text-lg font-semibold text-slate-900">
+            تغيير كلمة المرور
+          </h2>
+          <div className="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <Field label="كلمة المرور الحالية">
+                <input
+                  className={inputClass}
+                  type="password"
+                  autoComplete="current-password"
+                  value={passwordForm.currentPassword}
+                  onChange={(e) =>
+                    setPasswordForm((prev) => ({ ...prev, currentPassword: e.target.value }))
+                  }
+                  required
+                />
+              </Field>
+            </div>
+            <Field label="كلمة المرور الجديدة" hint="8 أحرف على الأقل">
+              <input
+                className={inputClass}
+                type="password"
+                autoComplete="new-password"
+                value={passwordForm.newPassword}
+                onChange={(e) =>
+                  setPasswordForm((prev) => ({ ...prev, newPassword: e.target.value }))
+                }
+                required
+                minLength={8}
+              />
+            </Field>
+            <Field label="تأكيد كلمة المرور الجديدة">
+              <input
+                className={inputClass}
+                type="password"
+                autoComplete="new-password"
+                value={passwordForm.confirmPassword}
+                onChange={(e) =>
+                  setPasswordForm((prev) => ({ ...prev, confirmPassword: e.target.value }))
+                }
+                required
+                minLength={8}
+              />
+            </Field>
+          </div>
+          <Button type="submit" loading={changingPassword}>
+            تغيير كلمة المرور
           </Button>
         </form>
       )}
