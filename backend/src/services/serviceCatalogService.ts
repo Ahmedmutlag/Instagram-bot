@@ -123,6 +123,52 @@ export async function updateService(id: string, input: UpdateServiceInput) {
   return withComputedFields(service);
 }
 
+/**
+ * Auto-generates a sellable Service for every ACTIVE ProviderService under
+ * the given provider that doesn't already have one, pricing each at
+ * costPrice * (1 + markupPercent / 100). Admin can edit names/prices/status
+ * individually afterward — this is a fast starting point, not a permanent
+ * pricing decision.
+ */
+export async function bulkGenerateServicesFromProvider(providerId: string, markupPercent: number) {
+  if (!Number.isFinite(markupPercent) || markupPercent <= 0) {
+    throw AppError.badRequest("هامش الربح يجب أن يكون رقماً أكبر من صفر");
+  }
+
+  const provider = await prisma.provider.findUnique({ where: { id: providerId } });
+  if (!provider) throw AppError.notFound("مزود الخدمة غير موجود");
+
+  const mappedServices = await prisma.providerService.findMany({
+    where: { providerId, isActive: true },
+  });
+
+  const alreadyListed = await prisma.service.findMany({
+    where: { providerServiceId: { in: mappedServices.map((m) => m.id) } },
+    select: { providerServiceId: true },
+  });
+  const listedIds = new Set(alreadyListed.map((s) => s.providerServiceId));
+
+  const candidates = mappedServices.filter((m) => !listedIds.has(m.id));
+  if (candidates.length === 0) {
+    return { created: 0, skipped: mappedServices.length };
+  }
+
+  const result = await prisma.service.createMany({
+    data: candidates.map((m) => ({
+      name: m.name,
+      category: m.category,
+      providerId,
+      providerServiceId: m.id,
+      price: Number((toNumber(m.costPrice) * (1 + markupPercent / 100)).toFixed(4)),
+      minQuantity: m.minQuantity,
+      maxQuantity: m.maxQuantity,
+      status: "ACTIVE",
+    })),
+  });
+
+  return { created: result.count, skipped: mappedServices.length - result.count };
+}
+
 export async function deleteService(id: string) {
   const existing = await prisma.service.findUnique({ where: { id } });
   if (!existing) throw AppError.notFound("الخدمة غير موجودة");

@@ -53,6 +53,29 @@ servicesRouter.post(
   })
 );
 
+const bulkGenerateSchema = z.object({
+  providerId: z.string().min(1),
+  markupPercent: z.number().positive(),
+});
+
+servicesRouter.post(
+  "/bulk-generate",
+  validateBody(bulkGenerateSchema),
+  asyncHandler(async (req: AuthedRequest, res) => {
+    const { providerId, markupPercent } = req.body;
+    const result = await serviceCatalog.bulkGenerateServicesFromProvider(providerId, markupPercent);
+    await recordAudit({
+      adminId: req.admin!.adminId,
+      action: "SERVICE_BULK_GENERATE",
+      entityType: "Provider",
+      entityId: providerId,
+      newValue: { markupPercent, ...result },
+      ipAddress: req.ip,
+    });
+    res.json({ data: result });
+  })
+);
+
 servicesRouter.patch(
   "/:id",
   validateBody(serviceSchema.partial()),

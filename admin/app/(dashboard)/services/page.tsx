@@ -54,6 +54,7 @@ export default function ServicesPage() {
   const [editing, setEditing] = useState<Service | null>(null);
   const [deleting, setDeleting] = useState<Service | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [generateOpen, setGenerateOpen] = useState(false);
 
   function load() {
     setLoading(true);
@@ -112,14 +113,19 @@ export default function ServicesPage() {
         title="الخدمات"
         description="إدارة الخدمات المعروضة للمستخدمين"
         actions={
-          <Button
-            onClick={() => {
-              setEditing(null);
-              setFormOpen(true);
-            }}
-          >
-            + إضافة خدمة
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => setGenerateOpen(true)}>
+              توليد خدمات تلقائياً
+            </Button>
+            <Button
+              onClick={() => {
+                setEditing(null);
+                setFormOpen(true);
+              }}
+            >
+              + إضافة خدمة
+            </Button>
+          </div>
         }
       />
 
@@ -237,7 +243,110 @@ export default function ServicesPage() {
         description={`هل أنت متأكد من حذف الخدمة "${deleting?.name}"؟ لا يمكن التراجع عن هذا الإجراء.`}
         confirmLabel="حذف"
       />
+
+      <GenerateServicesModal
+        open={generateOpen}
+        onClose={() => setGenerateOpen(false)}
+        onGenerated={() => {
+          setGenerateOpen(false);
+          load();
+        }}
+      />
     </div>
+  );
+}
+
+function GenerateServicesModal({
+  open,
+  onClose,
+  onGenerated,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onGenerated: () => void;
+}) {
+  const [providers, setProviders] = useState<Provider[]>([]);
+  const [providerId, setProviderId] = useState("");
+  const [markupPercent, setMarkupPercent] = useState("50");
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setProviderId("");
+    setMarkupPercent("50");
+    api
+      .get<Provider[]>("/providers")
+      .then(setProviders)
+      .catch((err) => toast.error(getErrorMessage(err)));
+  }, [open]);
+
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!providerId) {
+      toast.error("يرجى اختيار المزود");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const result = await api.post<{ created: number; skipped: number }>(
+        "/services/bulk-generate",
+        { providerId, markupPercent: Number(markupPercent) }
+      );
+      toast.success(
+        `تم إنشاء ${result.created} خدمة للبيع${result.skipped ? ` (تم تجاهل ${result.skipped} خدمة معروضة مسبقاً)` : ""}`
+      );
+      onGenerated();
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title="توليد خدمات تلقائياً">
+      <form onSubmit={onSubmit}>
+        <p className="mb-4 text-sm text-slate-600">
+          ينشئ خدمة معروضة للبيع لكل خدمة مستوردة من المزود المحدد وليس لها
+          خدمة بيع بعد، بسعر = التكلفة + هامش الربح. تقدر تعدّل الأسماء
+          والأسعار فردياً بعدها.
+        </p>
+        <Field label="المزود">
+          <select
+            className={inputClass}
+            required
+            value={providerId}
+            onChange={(e) => setProviderId(e.target.value)}
+          >
+            <option value="">اختر المزود</option>
+            {providers.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="هامش الربح (%)">
+          <input
+            type="number"
+            step="0.01"
+            min="0.01"
+            required
+            className={inputClass}
+            value={markupPercent}
+            onChange={(e) => setMarkupPercent(e.target.value)}
+          />
+        </Field>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button type="button" variant="secondary" onClick={onClose}>
+            إلغاء
+          </Button>
+          <Button type="submit" loading={submitting}>
+            توليد
+          </Button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
