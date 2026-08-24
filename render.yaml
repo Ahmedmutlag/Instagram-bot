@@ -8,7 +8,7 @@
 
 databases:
   - name: smm-postgres
-    plan: starter
+    plan: basic-256mb
     databaseName: smm_bot
     user: smm_user
 
