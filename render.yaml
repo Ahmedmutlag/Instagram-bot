@@ -18,6 +18,9 @@ services:
     name: smm-redis
     plan: starter
     ipAllowList: []
+    # BullMQ needs the queue keys it manages to never be evicted under
+    # memory pressure, or jobs (order retries, payment checks) can vanish.
+    maxmemoryPolicy: noeviction
 
   # --- Backend REST API (consumed by the admin dashboard) ---
   - type: web
