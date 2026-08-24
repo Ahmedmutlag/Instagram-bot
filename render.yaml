@@ -59,7 +59,7 @@ services:
         value: 4000
       # Update this once you know the admin service's real Render URL.
       - key: ADMIN_CORS_ORIGIN
-        value: https://smm-admin.onrender.com
+        value: https://smm-admin-ev6v.onrender.com
       - key: DEFAULT_CURRENCY
         value: USD
       - key: SEED_ADMIN_EMAIL
@@ -67,14 +67,17 @@ services:
       - key: SEED_ADMIN_PASSWORD
         sync: false
 
-  # --- Telegram bot (long polling, no incoming HTTP traffic) ---
+  # --- Telegram bot (long polling) + background workers (order sync/retry,
+  # payment verification, notifications), combined into one process to save
+  # the cost of a separate service. Split them back into two services (see
+  # git history) if you outgrow a single instance.
   - type: worker
     name: smm-bot
     runtime: docker
     plan: starter
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
-    dockerCommand: node dist/src/bot/index.js
+    dockerCommand: node dist/src/combinedBotWorker.js
     envVars:
       - key: NODE_ENV
         value: production
@@ -97,50 +100,14 @@ services:
         generateValue: true
       - key: JWT_EXPIRES_IN
         value: 12h
-      # Must be the EXACT SAME value as on smm-api and smm-worker — this key
-      # decrypts provider API keys that were encrypted by the API service.
+      # Must be the EXACT SAME value as on smm-api — this key decrypts
+      # provider API keys that were encrypted by the API service.
       - key: ENCRYPTION_KEY
         sync: false
       - key: API_PORT
         value: 4000
       - key: ADMIN_CORS_ORIGIN
-        value: https://smm-admin.onrender.com
-      - key: DEFAULT_CURRENCY
-        value: USD
-
-  # --- Background workers (order sync/retry, payment verification, notifications) ---
-  - type: worker
-    name: smm-worker
-    runtime: docker
-    plan: starter
-    dockerfilePath: ./backend/Dockerfile
-    dockerContext: ./backend
-    dockerCommand: node dist/src/workers/index.js
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: DATABASE_URL
-        fromDatabase:
-          name: smm-postgres
-          property: connectionString
-      - key: REDIS_URL
-        fromService:
-          type: redis
-          name: smm-redis
-          property: connectionString
-      - key: TELEGRAM_BOT_TOKEN
-        sync: false
-      - key: JWT_SECRET
-        generateValue: true
-      - key: JWT_EXPIRES_IN
-        value: 12h
-      # Must be the EXACT SAME value as on smm-api and smm-bot.
-      - key: ENCRYPTION_KEY
-        sync: false
-      - key: API_PORT
-        value: 4000
-      - key: ADMIN_CORS_ORIGIN
-        value: https://smm-admin.onrender.com
+        value: https://smm-admin-ev6v.onrender.com
       - key: DEFAULT_CURRENCY
         value: USD
 
@@ -157,4 +124,4 @@ services:
       # smm-api URL Render assigns, then trigger a manual redeploy of this
       # service if it differs from the guess below.
       - key: NEXT_PUBLIC_API_BASE_URL
-        value: https://smm-api.onrender.com/api/v1
+        value: https://smm-api-lggi.onrender.com/api/v1
