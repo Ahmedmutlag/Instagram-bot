@@ -1,0 +1,160 @@
+# Render Blueprint — deploys the whole platform (API, bot, worker, admin
+# dashboard, PostgreSQL, Redis) as one unit.
+#
+# Usage: on Render, click "New +" -> "Blueprint", connect this GitHub repo,
+# and Render will read this file and create every service below. You will
+# be prompted to fill in the `sync: false` secrets manually (they are never
+# stored in git). See README.md / DEPLOY_RENDER.md for the full walkthrough.
+
+databases:
+  - name: smm-postgres
+    plan: starter
+    databaseName: smm_bot
+    user: smm_user
+
+services:
+  # --- Redis (BullMQ background jobs + bot session storage) ---
+  - type: redis
+    name: smm-redis
+    plan: starter
+    ipAllowList: []
+
+  # --- Backend REST API (consumed by the admin dashboard) ---
+  - type: web
+    name: smm-api
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    dockerCommand: node dist/src/api/server.js
+    healthCheckPath: /health
+    # Runs migrations + the one-time seed (default admin + settings) before
+    # every deploy. Safe to re-run: migrate deploy and the seed script are
+    # both idempotent.
+    preDeployCommand: npx prisma migrate deploy && node dist/prisma/seed.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: smm-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: smm-redis
+          property: connectionString
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 12h
+      # Must be a 64-character hex string (32 bytes). Generate it yourself
+      # (e.g. `openssl rand -hex 32`) and paste it in the Render dashboard —
+      # Render's auto-generated values are not guaranteed to be valid hex.
+      - key: ENCRYPTION_KEY
+        sync: false
+      - key: API_PORT
+        value: 4000
+      # Update this once you know the admin service's real Render URL.
+      - key: ADMIN_CORS_ORIGIN
+        value: https://smm-admin.onrender.com
+      - key: DEFAULT_CURRENCY
+        value: USD
+      - key: SEED_ADMIN_EMAIL
+        sync: false
+      - key: SEED_ADMIN_PASSWORD
+        sync: false
+
+  # --- Telegram bot (long polling, no incoming HTTP traffic) ---
+  - type: worker
+    name: smm-bot
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    dockerCommand: node dist/src/bot/index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: smm-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: smm-redis
+          property: connectionString
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      # Not actually used outside the API process (only admin-login JWTs use
+      # it), but every process shares the same env schema and requires a
+      # value — an independent generated one is fine here, it does not need
+      # to match the API service's JWT_SECRET.
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 12h
+      # Must be the EXACT SAME value as on smm-api and smm-worker — this key
+      # decrypts provider API keys that were encrypted by the API service.
+      - key: ENCRYPTION_KEY
+        sync: false
+      - key: API_PORT
+        value: 4000
+      - key: ADMIN_CORS_ORIGIN
+        value: https://smm-admin.onrender.com
+      - key: DEFAULT_CURRENCY
+        value: USD
+
+  # --- Background workers (order sync/retry, payment verification, notifications) ---
+  - type: worker
+    name: smm-worker
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    dockerCommand: node dist/src/workers/index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: smm-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: smm-redis
+          property: connectionString
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 12h
+      # Must be the EXACT SAME value as on smm-api and smm-bot.
+      - key: ENCRYPTION_KEY
+        sync: false
+      - key: API_PORT
+        value: 4000
+      - key: ADMIN_CORS_ORIGIN
+        value: https://smm-admin.onrender.com
+      - key: DEFAULT_CURRENCY
+        value: USD
+
+  # --- Admin dashboard (Next.js) ---
+  - type: web
+    name: smm-admin
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./admin/Dockerfile
+    dockerContext: ./admin
+    dockerCommand: node server.js
+    envVars:
+      # Baked into the Next.js build at build time. Update this to the real
+      # smm-api URL Render assigns, then trigger a manual redeploy of this
+      # service if it differs from the guess below.
+      - key: NEXT_PUBLIC_API_BASE_URL
+        value: https://smm-api.onrender.com/api/v1
