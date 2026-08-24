@@ -22,6 +22,8 @@ export interface WizardState {
 
 export interface SessionData {
   wizard?: WizardState;
+  /** Transient state for browsing the services catalog (categories + pagination). */
+  serviceBrowse?: { categories: string[] };
 }
 
 export interface BotContext extends Context {

@@ -12,20 +12,103 @@ import { formatMoney, formatOrderStatus } from "../format";
 import { AppError } from "../../utils/errors";
 import { Markup } from "telegraf";
 
+const SERVICES_PAGE_SIZE = 8;
+const UNCATEGORIZED_LABEL = "أخرى";
+
+async function getServicesGroupedByCategory() {
+  const services = await listActiveServicesForBot();
+  const groups = new Map<string, typeof services>();
+  for (const service of services) {
+    const key = service.category?.trim() || UNCATEGORIZED_LABEL;
+    const list = groups.get(key);
+    if (list) list.push(service);
+    else groups.set(key, [service]);
+  }
+  return groups;
+}
+
+async function buildServicePage(ctx: BotContext, catIndex: number, page: number) {
+  const groups = await getServicesGroupedByCategory();
+  const categories = ctx.session.serviceBrowse?.categories ?? Array.from(groups.keys());
+  const category = categories[catIndex];
+  const items = category ? groups.get(category) ?? [] : [];
+
+  if (!category || items.length === 0) {
+    return { text: "هذه الفئة لم تعد متوفرة.", markup: undefined };
+  }
+
+  const currency = await getSetting(SETTINGS_KEYS.CURRENCY);
+  const totalPages = Math.max(1, Math.ceil(items.length / SERVICES_PAGE_SIZE));
+  const safePage = Math.min(Math.max(page, 0), totalPages - 1);
+  const slice = items.slice(safePage * SERVICES_PAGE_SIZE, safePage * SERVICES_PAGE_SIZE + SERVICES_PAGE_SIZE);
+
+  const rows = slice.map((s) => [
+    Markup.button.callback(`${s.name} — ${formatMoney(s.price, currency)} / 1000`, `svc:${s.id}`),
+  ]);
+
+  const navRow = [];
+  if (safePage > 0) navRow.push(Markup.button.callback("◀️ السابق", `svcpg:${catIndex}:${safePage - 1}`));
+  if (safePage < totalPages - 1) navRow.push(Markup.button.callback("التالي ▶️", `svcpg:${catIndex}:${safePage + 1}`));
+  if (navRow.length > 0) rows.push(navRow);
+
+  if (categories.length > 1) {
+    rows.push([Markup.button.callback("🔙 رجوع للفئات", "svc:categories")]);
+  }
+
+  return {
+    text: `📂 ${category} — صفحة ${safePage + 1}/${totalPages}\nاختر الخدمة المطلوبة:`,
+    markup: Markup.inlineKeyboard(rows),
+  };
+}
+
 export function registerOrderHandlers(bot: Telegraf<BotContext>) {
   bot.hears(MENU_LABELS.SERVICES, async (ctx) => {
     clearWizard(ctx);
-    const services = await listActiveServicesForBot();
-    if (services.length === 0) {
+    const groups = await getServicesGroupedByCategory();
+    if (groups.size === 0) {
       await ctx.reply("لا توجد خدمات متاحة حالياً، الرجاء المحاولة لاحقاً.");
       return;
     }
-    const currency = await getSetting(SETTINGS_KEYS.CURRENCY);
-    const buttons = services.map((s) =>
-      Markup.button.callback(`${s.name} — ${formatMoney(s.price, currency)} / 1000`, `svc:${s.id}`)
-    );
-    const rows = buttons.map((b) => [b]);
-    await ctx.reply("🛒 اختر الخدمة المطلوبة:", Markup.inlineKeyboard(rows));
+
+    const categories = Array.from(groups.keys());
+    ctx.session.serviceBrowse = { categories };
+
+    if (categories.length === 1) {
+      const { text, markup } = await buildServicePage(ctx, 0, 0);
+      await ctx.reply(text, markup);
+      return;
+    }
+
+    const rows = categories.map((cat, i) => [
+      Markup.button.callback(`${cat} (${groups.get(cat)!.length})`, `catidx:${i}`),
+    ]);
+    await ctx.reply("🛒 اختر فئة الخدمة:", Markup.inlineKeyboard(rows));
+  });
+
+  bot.action(/^catidx:(\d+)$/, async (ctx) => {
+    await ctx.answerCbQuery();
+    const catIndex = Number(ctx.match[1]);
+    const { text, markup } = await buildServicePage(ctx, catIndex, 0);
+    await ctx.editMessageText(text, markup);
+  });
+
+  bot.action(/^svcpg:(\d+):(\d+)$/, async (ctx) => {
+    await ctx.answerCbQuery();
+    const catIndex = Number(ctx.match[1]);
+    const page = Number(ctx.match[2]);
+    const { text, markup } = await buildServicePage(ctx, catIndex, page);
+    await ctx.editMessageText(text, markup);
+  });
+
+  bot.action("svc:categories", async (ctx) => {
+    await ctx.answerCbQuery();
+    const groups = await getServicesGroupedByCategory();
+    const categories = Array.from(groups.keys());
+    ctx.session.serviceBrowse = { categories };
+    const rows = categories.map((cat, i) => [
+      Markup.button.callback(`${cat} (${groups.get(cat)!.length})`, `catidx:${i}`),
+    ]);
+    await ctx.editMessageText("🛒 اختر فئة الخدمة:", Markup.inlineKeyboard(rows));
   });
 
   bot.action(/^svc:(.+)$/, async (ctx) => {
