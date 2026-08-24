@@ -10,7 +10,10 @@ export interface AdminTokenPayload {
 }
 
 export async function loginAdmin(email: string, password: string) {
-  const admin = await prisma.admin.findUnique({ where: { email: email.toLowerCase() } });
+  // Case-insensitive lookup: admins may have been seeded/created with any
+  // casing in their email (e.g. via SEED_ADMIN_EMAIL), so a plain
+  // findUnique on a lowercased value would silently never match.
+  const admin = await prisma.admin.findFirst({ where: { email: { equals: email, mode: "insensitive" } } });
   if (!admin || !admin.isActive) {
     throw AppError.unauthorized("بيانات الدخول غير صحيحة");
   }

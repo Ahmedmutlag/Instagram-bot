@@ -4,10 +4,10 @@ import bcrypt from "bcryptjs";
 const prisma = new PrismaClient();
 
 async function main() {
-  const adminEmail = process.env.SEED_ADMIN_EMAIL || "admin@example.com";
+  const adminEmail = (process.env.SEED_ADMIN_EMAIL || "admin@example.com").toLowerCase();
   const adminPassword = process.env.SEED_ADMIN_PASSWORD || "ChangeMe123!";
 
-  const existingAdmin = await prisma.admin.findUnique({ where: { email: adminEmail } });
+  const existingAdmin = await prisma.admin.findFirst({ where: { email: { equals: adminEmail, mode: "insensitive" } } });
   if (!existingAdmin) {
     const passwordHash = await bcrypt.hash(adminPassword, 12);
     await prisma.admin.create({

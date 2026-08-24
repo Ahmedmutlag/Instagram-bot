@@ -14,6 +14,17 @@ describe("admin authentication API", () => {
     expect(res.body.data.admin.email).toBe("owner@example.com");
   });
 
+  it("logs in regardless of email casing on either side (stored or typed)", async () => {
+    await createTestAdmin({ email: "Mixed.Case@Example.com" });
+
+    const res = await request(app)
+      .post("/api/v1/auth/login")
+      .send({ email: "mixed.case@example.com", password: "Password123!" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.admin.email).toBe("Mixed.Case@Example.com");
+  });
+
   it("rejects invalid credentials", async () => {
     await createTestAdmin({ email: "owner2@example.com" });
     const res = await request(app).post("/api/v1/auth/login").send({ email: "owner2@example.com", password: "wrong-password" });
