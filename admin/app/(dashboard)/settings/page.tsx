@@ -20,6 +20,7 @@ interface SettingsFormState {
   minDeposit: string;
   referralPercent: string;
   depositInstructions: string;
+  adminNotifyChatId: string;
 }
 
 const EMPTY_FORM: SettingsFormState = {
@@ -31,6 +32,7 @@ const EMPTY_FORM: SettingsFormState = {
   minDeposit: "",
   referralPercent: "",
   depositInstructions: "",
+  adminNotifyChatId: "",
 };
 
 interface PasswordFormState {
@@ -70,6 +72,7 @@ export default function SettingsPage() {
           referralPercent:
             data.referralPercent !== undefined ? String(data.referralPercent) : "",
           depositInstructions: String(data.depositInstructions ?? ""),
+          adminNotifyChatId: String(data.adminNotifyChatId ?? ""),
         });
         setHasStoredToken(Boolean(data.botToken));
       })
@@ -96,6 +99,7 @@ export default function SettingsPage() {
       minDeposit: String(form.minDeposit ? Number(form.minDeposit) : 0),
       referralPercent: String(form.referralPercent ? Number(form.referralPercent) : 0),
       depositInstructions: form.depositInstructions.trim(),
+      adminNotifyChatId: form.adminNotifyChatId.trim(),
     };
     if (form.botToken.trim()) {
       payload.botToken = form.botToken.trim();
@@ -237,6 +241,20 @@ export default function SettingsPage() {
                   value={form.depositInstructions}
                   onChange={(e) => updateField("depositInstructions", e.target.value)}
                   placeholder="مثال: حوّل المبلغ إلى حساب البنك الأهلي رقم 1234567890 باسم ..."
+                />
+              </Field>
+            </div>
+            <div className="sm:col-span-2">
+              <Field
+                label="معرف إشعارات الأدمن (Telegram Chat ID)"
+                hint='أرسل "/myid" للبوت من حسابك بتيليجرام ليعطيك هذا الرقم، والصقه هنا لتستلم إشعاراً فورياً بكل طلب إيداع جديد'
+              >
+                <input
+                  className={`${inputClass} text-left`}
+                  dir="ltr"
+                  value={form.adminNotifyChatId}
+                  onChange={(e) => updateField("adminNotifyChatId", e.target.value)}
+                  placeholder="مثال: 123456789"
                 />
               </Field>
             </div>

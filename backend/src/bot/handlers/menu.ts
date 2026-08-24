@@ -9,6 +9,13 @@ import { getSetting, SETTINGS_KEYS } from "../../services/settingsService";
 import { formatMoney, formatOrderStatus } from "../format";
 
 export function registerMenuHandlers(bot: Telegraf<BotContext>) {
+  bot.command("myid", async (ctx) => {
+    await ctx.reply(
+      `🆔 معرّفك الرقمي بتيليجرام: \`${ctx.from.id}\`\n\nإذا كنت المشرف، انسخ هذا الرقم وضعه بحقل "معرف إشعارات الأدمن" بصفحة الإعدادات بلوحة الإدارة عشان تستلم إشعار فوري عند أي طلب إيداع جديد.`,
+      { parse_mode: "Markdown" }
+    );
+  });
+
   bot.start(async (ctx) => {
     clearWizard(ctx);
     const referralCode = ctx.startPayload?.trim();

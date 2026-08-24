@@ -9,6 +9,7 @@ export const SETTINGS_KEYS = {
   REFERRAL_PERCENT: "referralPercent",
   BOT_TOKEN: "botToken",
   DEPOSIT_INSTRUCTIONS: "depositInstructions",
+  ADMIN_NOTIFY_CHAT_ID: "adminNotifyChatId",
 } as const;
 
 export type SettingsKey = (typeof SETTINGS_KEYS)[keyof typeof SETTINGS_KEYS];
@@ -27,6 +28,11 @@ const DEFAULTS: Record<SettingsKey, string> = {
   // Shown to users in the bot when they request a deposit — bank account /
   // mobile wallet details, etc. Admin fills this in from the settings page.
   [SETTINGS_KEYS.DEPOSIT_INSTRUCTIONS]: "يرجى التواصل مع الدعم لمعرفة طريقة الإيداع.",
+  // Telegram numeric chat ID to notify whenever a new manual deposit is
+  // submitted, so the admin doesn't have to keep checking the dashboard.
+  // Empty means notifications are off. Admin can get their own ID by
+  // sending /myid to the bot.
+  [SETTINGS_KEYS.ADMIN_NOTIFY_CHAT_ID]: "",
 };
 
 let cache: Record<string, string> | null = null;

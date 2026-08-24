@@ -147,6 +147,7 @@ export interface Settings {
   minDeposit?: number;
   referralPercent?: number;
   depositInstructions?: string;
+  adminNotifyChatId?: string;
   [key: string]: string | number | boolean | undefined;
 }
 

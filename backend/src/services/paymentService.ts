@@ -31,9 +31,24 @@ export async function createDepositPayment(userId: string, amount: number, metho
   // Manual transfers are confirmed by an admin, not by polling a gateway.
   if (method !== MANUAL_PAYMENT_METHOD) {
     await paymentVerifyQueue.add("verify", { paymentId: payment.id }, { delay: 3_000 });
+  } else {
+    await notifyAdminOfManualDeposit(payment.id, userId, amount, currency);
   }
 
   return { payment, redirectUrl: result.redirectUrl };
+}
+
+async function notifyAdminOfManualDeposit(paymentId: string, userId: string, amount: number, currency: string) {
+  const adminChatId = await getSetting(SETTINGS_KEYS.ADMIN_NOTIFY_CHAT_ID);
+  if (!adminChatId.trim()) return;
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  const who = user ? `@${user.username ?? user.telegramId.toString()}` : userId;
+
+  await notificationQueue.add("notify", {
+    telegramId: adminChatId.trim(),
+    message: `🔔 طلب إيداع جديد بانتظار المراجعة\n\nمن: ${who}\nالمبلغ: ${amount} ${currency}\nرقم العملية: ${paymentId}\n\nراجع لوحة الإدارة → المدفوعات لتأكيده أو رفضه.`,
+  });
 }
 
 async function settlePaymentStatus(paymentId: string, newStatus: "SUCCESS" | "FAILED", metadata?: Record<string, unknown>) {
