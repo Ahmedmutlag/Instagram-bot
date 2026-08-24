@@ -146,6 +146,7 @@ export interface Settings {
   supportUsername?: string;
   minDeposit?: number;
   referralPercent?: number;
+  depositInstructions?: string;
   [key: string]: string | number | boolean | undefined;
 }
 

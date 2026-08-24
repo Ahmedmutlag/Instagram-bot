@@ -1,9 +1,15 @@
-import { createDepositPayment, verifyAndSettlePayment } from "../../src/services/paymentService";
+import {
+  createDepositPayment,
+  verifyAndSettlePayment,
+  confirmManualPayment,
+  rejectManualPayment,
+} from "../../src/services/paymentService";
 import { updateSettings } from "../../src/services/settingsService";
 import { createTestUser } from "../factories";
 import { AppError } from "../../src/utils/errors";
 import { prisma } from "../../src/lib/prisma";
 import { paymentVerifyQueue } from "../../src/queues/queues";
+import { MANUAL_PAYMENT_METHOD } from "../../src/payments/registry";
 
 describe("paymentService", () => {
   beforeEach(async () => {
@@ -52,5 +58,56 @@ describe("paymentService", () => {
 
     const freshUser = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
     expect(Number(freshUser.balance)).toBe(15);
+  });
+
+  it("does not enqueue automatic verification for manual (bank transfer) deposits", async () => {
+    const user = await createTestUser({ balance: 0 });
+    const enqueueSpy = jest.spyOn(paymentVerifyQueue, "add").mockResolvedValue({} as any);
+
+    await createDepositPayment(user.id, 20, MANUAL_PAYMENT_METHOD);
+    expect(enqueueSpy).not.toHaveBeenCalled();
+
+    enqueueSpy.mockRestore();
+  });
+
+  it("credits the balance when an admin confirms a manual deposit", async () => {
+    const user = await createTestUser({ balance: 0 });
+    const { payment } = await createDepositPayment(user.id, 25, MANUAL_PAYMENT_METHOD);
+
+    const confirmed = await confirmManualPayment(payment.id);
+    expect(confirmed?.status).toBe("SUCCESS");
+
+    const freshUser = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+    expect(Number(freshUser.balance)).toBe(25);
+  });
+
+  it("does not credit the balance when an admin rejects a manual deposit", async () => {
+    const user = await createTestUser({ balance: 0 });
+    const { payment } = await createDepositPayment(user.id, 25, MANUAL_PAYMENT_METHOD);
+
+    const rejected = await rejectManualPayment(payment.id, "لم يصل التحويل");
+    expect(rejected?.status).toBe("FAILED");
+
+    const freshUser = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+    expect(Number(freshUser.balance)).toBe(0);
+  });
+
+  it("rejects confirming a non-manual payment through the manual-confirm action", async () => {
+    const user = await createTestUser({ balance: 0 });
+    jest.spyOn(paymentVerifyQueue, "add").mockResolvedValue({} as any);
+    const { payment } = await createDepositPayment(user.id, 10);
+
+    await expect(confirmManualPayment(payment.id)).rejects.toThrow(AppError);
+  });
+
+  it("rejects confirming a manual payment twice", async () => {
+    const user = await createTestUser({ balance: 0 });
+    const { payment } = await createDepositPayment(user.id, 10, MANUAL_PAYMENT_METHOD);
+
+    await confirmManualPayment(payment.id);
+    await expect(confirmManualPayment(payment.id)).rejects.toThrow(AppError);
+
+    const freshUser = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+    expect(Number(freshUser.balance)).toBe(10);
   });
 });

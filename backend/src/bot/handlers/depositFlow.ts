@@ -4,6 +4,7 @@ import { cancelInlineKeyboard, mainMenuKeyboard, MENU_LABELS } from "../keyboard
 import { getUserByTelegramId } from "../../services/userService";
 import { createDepositPayment } from "../../services/paymentService";
 import { getSetting, SETTINGS_KEYS } from "../../services/settingsService";
+import { MANUAL_PAYMENT_METHOD } from "../../payments/registry";
 import { formatMoney } from "../format";
 import { AppError } from "../../utils/errors";
 
@@ -32,10 +33,13 @@ export async function handleDepositWizardText(ctx: BotContext, wizard: WizardSta
   if (!user) return ctx.reply("الرجاء إرسال /start أولاً");
 
   try {
-    const { payment } = await createDepositPayment(user.id, amount);
+    const { payment } = await createDepositPayment(user.id, amount, MANUAL_PAYMENT_METHOD);
     clearWizard(ctx);
+    const instructions = await getSetting(SETTINGS_KEYS.DEPOSIT_INSTRUCTIONS);
     await ctx.reply(
-      `✅ تم استلام طلب الإيداع بقيمة ${formatMoney(amount)}.\nرقم العملية: ${payment.id}\n\nسيتم تأكيد الدفع تلقائياً خلال لحظات وستصلك رسالة عند إضافة الرصيد.`,
+      `💳 طلب إيداع بقيمة ${formatMoney(amount)}\nرقم العملية: ${payment.id}\n\n` +
+        `📋 طريقة الدفع:\n${instructions}\n\n` +
+        `بعد إتمام التحويل، انتظر تأكيد فريق الدعم — سيتم إشعارك تلقائياً فور إضافة الرصيد إلى حسابك.`,
       mainMenuKeyboard()
     );
   } catch (error) {

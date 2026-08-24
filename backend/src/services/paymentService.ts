@@ -4,7 +4,7 @@ import { AppError } from "../utils/errors";
 import { toNumber } from "../utils/money";
 import { creditBalance } from "./balanceService";
 import { getSetting, SETTINGS_KEYS } from "./settingsService";
-import { getPaymentGateway, DEFAULT_PAYMENT_METHOD } from "../payments/registry";
+import { getPaymentGateway, DEFAULT_PAYMENT_METHOD, MANUAL_PAYMENT_METHOD } from "../payments/registry";
 import { paymentVerifyQueue, notificationQueue } from "../queues/queues";
 
 export async function createDepositPayment(userId: string, amount: number, method: string = DEFAULT_PAYMENT_METHOD) {
@@ -28,33 +28,23 @@ export async function createDepositPayment(userId: string, amount: number, metho
     },
   });
 
-  await paymentVerifyQueue.add(
-    "verify",
-    { paymentId: payment.id },
-    { delay: 3_000 }
-  );
+  // Manual transfers are confirmed by an admin, not by polling a gateway.
+  if (method !== MANUAL_PAYMENT_METHOD) {
+    await paymentVerifyQueue.add("verify", { paymentId: payment.id }, { delay: 3_000 });
+  }
 
   return { payment, redirectUrl: result.redirectUrl };
 }
 
-export async function verifyAndSettlePayment(paymentId: string) {
-  const payment = await prisma.payment.findUnique({ where: { id: paymentId } });
-  if (!payment || payment.status !== "PENDING") return payment;
-
-  const gateway = getPaymentGateway(payment.method);
-  const verification = await gateway.verifyPayment({ providerRef: payment.providerRef ?? "" });
-
-  if (verification.status === "PENDING") {
-    return payment; // will be retried by the worker
-  }
-
-  const newStatus: PaymentStatus = verification.success ? "SUCCESS" : "FAILED";
-
+async function settlePaymentStatus(paymentId: string, newStatus: "SUCCESS" | "FAILED", metadata?: Record<string, unknown>) {
   const updated = await prisma.$transaction(async (tx) => {
     const fresh = await tx.payment.findUnique({ where: { id: paymentId } });
     if (!fresh || fresh.status !== "PENDING") return fresh;
 
-    const paymentRow = await tx.payment.update({ where: { id: paymentId }, data: { status: newStatus } });
+    const paymentRow = await tx.payment.update({
+      where: { id: paymentId },
+      data: { status: newStatus, metadata: metadata as any },
+    });
 
     if (newStatus === "SUCCESS") {
       await creditBalance(
@@ -77,12 +67,52 @@ export async function verifyAndSettlePayment(paymentId: string) {
       const message =
         newStatus === "SUCCESS"
           ? `تم إضافة ${toNumber(updated.amount)} إلى رصيدك بنجاح.`
-          : `عذراً، فشلت عملية الإيداع الخاصة بك.`;
+          : `عذراً، لم يتم تأكيد عملية الإيداع الخاصة بك. تواصل مع الدعم إذا كنت قد أرسلت المبلغ فعلاً.`;
       await notificationQueue.add("notify", { telegramId: user.telegramId.toString(), message });
     }
   }
 
   return updated;
+}
+
+export async function verifyAndSettlePayment(paymentId: string) {
+  const payment = await prisma.payment.findUnique({ where: { id: paymentId } });
+  if (!payment || payment.status !== "PENDING") return payment;
+
+  const gateway = getPaymentGateway(payment.method);
+  const verification = await gateway.verifyPayment({ providerRef: payment.providerRef ?? "" });
+
+  if (verification.status === "PENDING") {
+    return payment; // will be retried by the worker
+  }
+
+  return settlePaymentStatus(paymentId, verification.success ? "SUCCESS" : "FAILED");
+}
+
+/** Admin action: approve a pending manual (bank transfer) deposit once the funds are confirmed received. */
+export async function confirmManualPayment(paymentId: string) {
+  const payment = await prisma.payment.findUnique({ where: { id: paymentId } });
+  if (!payment) throw AppError.notFound("عملية الدفع غير موجودة");
+  if (payment.method !== MANUAL_PAYMENT_METHOD) {
+    throw AppError.badRequest("هذا الإجراء متاح فقط لعمليات الإيداع اليدوية");
+  }
+  if (payment.status !== "PENDING") {
+    throw AppError.badRequest("تم التعامل مع هذه العملية مسبقاً");
+  }
+  return settlePaymentStatus(paymentId, "SUCCESS");
+}
+
+/** Admin action: reject a pending manual deposit (e.g. no funds received / invalid reference). */
+export async function rejectManualPayment(paymentId: string, reason?: string) {
+  const payment = await prisma.payment.findUnique({ where: { id: paymentId } });
+  if (!payment) throw AppError.notFound("عملية الدفع غير موجودة");
+  if (payment.method !== MANUAL_PAYMENT_METHOD) {
+    throw AppError.badRequest("هذا الإجراء متاح فقط لعمليات الإيداع اليدوية");
+  }
+  if (payment.status !== "PENDING") {
+    throw AppError.badRequest("تم التعامل مع هذه العملية مسبقاً");
+  }
+  return settlePaymentStatus(paymentId, "FAILED", reason ? { rejectionReason: reason } : undefined);
 }
 
 export async function listPayments(params: { page: number; limit: number; status?: PaymentStatus }) {

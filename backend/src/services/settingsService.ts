@@ -8,6 +8,7 @@ export const SETTINGS_KEYS = {
   MIN_DEPOSIT: "minDeposit",
   REFERRAL_PERCENT: "referralPercent",
   BOT_TOKEN: "botToken",
+  DEPOSIT_INSTRUCTIONS: "depositInstructions",
 } as const;
 
 export type SettingsKey = (typeof SETTINGS_KEYS)[keyof typeof SETTINGS_KEYS];
@@ -23,6 +24,9 @@ const DEFAULTS: Record<SettingsKey, string> = {
   // TELEGRAM_BOT_TOKEN environment variable, since rotating it requires a
   // process restart. This setting exists so admins can view/record it.
   [SETTINGS_KEYS.BOT_TOKEN]: "",
+  // Shown to users in the bot when they request a deposit — bank account /
+  // mobile wallet details, etc. Admin fills this in from the settings page.
+  [SETTINGS_KEYS.DEPOSIT_INSTRUCTIONS]: "يرجى التواصل مع الدعم لمعرفة طريقة الإيداع.",
 };
 
 let cache: Record<string, string> | null = null;

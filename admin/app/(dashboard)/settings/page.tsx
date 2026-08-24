@@ -19,6 +19,7 @@ interface SettingsFormState {
   supportUsername: string;
   minDeposit: string;
   referralPercent: string;
+  depositInstructions: string;
 }
 
 const EMPTY_FORM: SettingsFormState = {
@@ -29,6 +30,7 @@ const EMPTY_FORM: SettingsFormState = {
   supportUsername: "",
   minDeposit: "",
   referralPercent: "",
+  depositInstructions: "",
 };
 
 interface PasswordFormState {
@@ -67,6 +69,7 @@ export default function SettingsPage() {
           minDeposit: data.minDeposit !== undefined ? String(data.minDeposit) : "",
           referralPercent:
             data.referralPercent !== undefined ? String(data.referralPercent) : "",
+          depositInstructions: String(data.depositInstructions ?? ""),
         });
         setHasStoredToken(Boolean(data.botToken));
       })
@@ -83,13 +86,16 @@ export default function SettingsPage() {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
-    const payload: Record<string, unknown> = {
+    // The backend stores every setting as a plain string, so all payload
+    // values must be strings (numeric inputs included) or validation fails.
+    const payload: Record<string, string> = {
       botName: form.botName.trim(),
       currency: form.currency.trim(),
       language: form.language.trim(),
       supportUsername: form.supportUsername.trim(),
-      minDeposit: form.minDeposit ? Number(form.minDeposit) : 0,
-      referralPercent: form.referralPercent ? Number(form.referralPercent) : 0,
+      minDeposit: String(form.minDeposit ? Number(form.minDeposit) : 0),
+      referralPercent: String(form.referralPercent ? Number(form.referralPercent) : 0),
+      depositInstructions: form.depositInstructions.trim(),
     };
     if (form.botToken.trim()) {
       payload.botToken = form.botToken.trim();
@@ -217,6 +223,20 @@ export default function SettingsPage() {
                   value={form.botToken}
                   onChange={(e) => updateField("botToken", e.target.value)}
                   placeholder={hasStoredToken ? "••••••••••••••••" : "أدخل رمز البوت"}
+                />
+              </Field>
+            </div>
+            <div className="sm:col-span-2">
+              <Field
+                label="طريقة الإيداع (تظهر للمستخدم عند طلب إضافة رصيد)"
+                hint="مثال: رقم حساب بنكي، محفظة إلكترونية، أو عنوان محفظة رقمية"
+              >
+                <textarea
+                  className={inputClass}
+                  rows={4}
+                  value={form.depositInstructions}
+                  onChange={(e) => updateField("depositInstructions", e.target.value)}
+                  placeholder="مثال: حوّل المبلغ إلى حساب البنك الأهلي رقم 1234567890 باسم ..."
                 />
               </Field>
             </div>
