@@ -169,6 +169,49 @@ export async function bulkGenerateServicesFromProvider(providerId: string, marku
   return { created: result.count, skipped: mappedServices.length - result.count };
 }
 
+/**
+ * Deletes every Service whose name/category does NOT contain any of the
+ * given keywords (case-insensitive substring match) — e.g. keep only
+ * Instagram/TikTok/Twitter listings and remove the rest of a bulk-generated
+ * catalog. Services with existing orders are left alone (deleting them
+ * would orphan order history) and counted separately.
+ */
+export async function bulkDeleteServicesExcludingKeywords(keepKeywords: string[]) {
+  const keywords = keepKeywords.map((k) => k.trim().toLowerCase()).filter(Boolean);
+  if (keywords.length === 0) {
+    throw AppError.badRequest("يجب تحديد كلمة واحدة على الأقل للاحتفاظ بها");
+  }
+
+  const services = await prisma.service.findMany({ select: { id: true, name: true, category: true } });
+
+  const toDelete = services.filter((s) => {
+    const haystack = `${s.name} ${s.category ?? ""}`.toLowerCase();
+    return !keywords.some((k) => haystack.includes(k));
+  });
+
+  if (toDelete.length === 0) {
+    return { deleted: 0, kept: services.length, skippedHasOrders: 0 };
+  }
+
+  const ordersByService = await prisma.order.groupBy({
+    by: ["serviceId"],
+    where: { serviceId: { in: toDelete.map((s) => s.id) } },
+    _count: true,
+  });
+  const hasOrders = new Set(ordersByService.map((o) => o.serviceId));
+
+  const deletable = toDelete.filter((s) => !hasOrders.has(s.id));
+  const skippedHasOrders = toDelete.length - deletable.length;
+
+  const result = await prisma.service.deleteMany({ where: { id: { in: deletable.map((s) => s.id) } } });
+
+  return {
+    deleted: result.count,
+    kept: services.length - toDelete.length,
+    skippedHasOrders,
+  };
+}
+
 export async function deleteService(id: string) {
   const existing = await prisma.service.findUnique({ where: { id } });
   if (!existing) throw AppError.notFound("الخدمة غير موجودة");

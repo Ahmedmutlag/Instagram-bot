@@ -55,6 +55,7 @@ export default function ServicesPage() {
   const [deleting, setDeleting] = useState<Service | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [generateOpen, setGenerateOpen] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
 
   function load() {
     setLoading(true);
@@ -113,9 +114,12 @@ export default function ServicesPage() {
         title="الخدمات"
         description="إدارة الخدمات المعروضة للمستخدمين"
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button variant="secondary" onClick={() => setGenerateOpen(true)}>
               توليد خدمات تلقائياً
+            </Button>
+            <Button variant="danger" onClick={() => setBulkDeleteOpen(true)}>
+              حذف الكل ما عدا...
             </Button>
             <Button
               onClick={() => {
@@ -252,7 +256,114 @@ export default function ServicesPage() {
           load();
         }}
       />
+
+      <BulkDeleteExceptModal
+        open={bulkDeleteOpen}
+        onClose={() => setBulkDeleteOpen(false)}
+        onDeleted={() => {
+          setBulkDeleteOpen(false);
+          load();
+        }}
+      />
     </div>
+  );
+}
+
+function BulkDeleteExceptModal({
+  open,
+  onClose,
+  onDeleted,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onDeleted: () => void;
+}) {
+  const [keywords, setKeywords] = useState("");
+  const [confirming, setConfirming] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      setKeywords("");
+      setConfirming(false);
+    }
+  }, [open]);
+
+  const keywordList = keywords
+    .split(",")
+    .map((k) => k.trim())
+    .filter(Boolean);
+
+  async function handleConfirm() {
+    setSubmitting(true);
+    try {
+      const result = await api.post<{ deleted: number; kept: number; skippedHasOrders: number }>(
+        "/services/bulk-delete-except",
+        { keepKeywords: keywordList }
+      );
+      toast.success(
+        `تم حذف ${result.deleted} خدمة، وبقي ${result.kept} خدمة${
+          result.skippedHasOrders ? ` (تم تجاهل ${result.skippedHasOrders} خدمة عليها طلبات سابقة)` : ""
+        }`
+      );
+      onDeleted();
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title="حذف الكل ما عدا...">
+      {!confirming ? (
+        <div>
+          <p className="mb-4 text-sm text-slate-600">
+            يحذف كل الخدمات المعروضة للبيع اللي اسمها أو فئتها ما تحتوي على
+            أي كلمة من الكلمات اللي تكتبها (بدون تأثير على الخدمات
+            المستوردة الأصلية من المزود — تقدر تولّد خدمات جديدة منها لاحقاً).
+          </p>
+          <Field label="الكلمات اللي تحتفظ بخدماتها (افصل بينها بفاصلة)" hint="مثال: Instagram, TikTok, Twitter, Telegram, Facebook">
+            <input
+              className={inputClass}
+              dir="ltr"
+              placeholder="Instagram, TikTok, Twitter, Telegram, Facebook"
+              value={keywords}
+              onChange={(e) => setKeywords(e.target.value)}
+            />
+          </Field>
+          <div className="mt-4 flex justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={onClose}>
+              إلغاء
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              disabled={keywordList.length === 0}
+              onClick={() => setConfirming(true)}
+            >
+              متابعة
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div>
+          <p className="mb-4 text-sm text-slate-700">
+            هل أنت متأكد؟ راح تُحذف كل الخدمات المعروضة للبيع{" "}
+            <strong>ما عدا</strong> اللي تحتوي على: {keywordList.join("، ")}.
+            هذا الإجراء لا يمكن التراجع عنه.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={() => setConfirming(false)}>
+              رجوع
+            </Button>
+            <Button type="button" variant="danger" loading={submitting} onClick={handleConfirm}>
+              نعم، احذف
+            </Button>
+          </div>
+        </div>
+      )}
+    </Modal>
   );
 }
 

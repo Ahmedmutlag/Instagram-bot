@@ -76,6 +76,26 @@ servicesRouter.post(
   })
 );
 
+const bulkDeleteExceptSchema = z.object({
+  keepKeywords: z.array(z.string().min(1)).min(1),
+});
+
+servicesRouter.post(
+  "/bulk-delete-except",
+  validateBody(bulkDeleteExceptSchema),
+  asyncHandler(async (req: AuthedRequest, res) => {
+    const result = await serviceCatalog.bulkDeleteServicesExcludingKeywords(req.body.keepKeywords);
+    await recordAudit({
+      adminId: req.admin!.adminId,
+      action: "SERVICE_BULK_DELETE_EXCEPT",
+      entityType: "Service",
+      newValue: { keepKeywords: req.body.keepKeywords, ...result },
+      ipAddress: req.ip,
+    });
+    res.json({ data: result });
+  })
+);
+
 servicesRouter.patch(
   "/:id",
   validateBody(serviceSchema.partial()),
