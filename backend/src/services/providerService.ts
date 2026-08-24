@@ -157,6 +157,53 @@ export async function createMappedService(providerId: string, input: CreateProvi
   });
 }
 
+/**
+ * Imports every remote service the provider offers that hasn't already been
+ * mapped, in one shot. Re-fetches the live service list itself (does not
+ * trust a client-supplied list) so the admin can't spoof cost prices.
+ */
+export async function bulkImportProviderServices(providerId: string) {
+  await getProviderRaw(providerId);
+  const { adapter } = await getAdapterForProvider(providerId);
+  const remoteServices = await adapter.getServices();
+
+  const existing = await prisma.providerService.findMany({
+    where: { providerId },
+    select: { externalServiceId: true },
+  });
+  const existingIds = new Set(existing.map((e) => e.externalServiceId));
+
+  const candidates = remoteServices.filter(
+    (rs) =>
+      !existingIds.has(rs.externalServiceId) &&
+      Number.isFinite(rs.min) &&
+      Number.isFinite(rs.max) &&
+      rs.min > 0 &&
+      rs.max >= rs.min &&
+      Number.isFinite(rs.rate) &&
+      rs.rate >= 0
+  );
+
+  if (candidates.length === 0) {
+    return { imported: 0, skipped: remoteServices.length };
+  }
+
+  const result = await prisma.providerService.createMany({
+    data: candidates.map((rs) => ({
+      providerId,
+      externalServiceId: rs.externalServiceId,
+      name: rs.name,
+      category: rs.category,
+      costPrice: rs.rate,
+      minQuantity: rs.min,
+      maxQuantity: rs.max,
+    })),
+    skipDuplicates: true,
+  });
+
+  return { imported: result.count, skipped: remoteServices.length - result.count };
+}
+
 export async function updateMappedService(id: string, input: Partial<CreateProviderServiceInput> & { isActive?: boolean }) {
   const existing = await prisma.providerService.findUnique({ where: { id } });
   if (!existing) throw AppError.notFound("خدمة المزود غير موجودة");

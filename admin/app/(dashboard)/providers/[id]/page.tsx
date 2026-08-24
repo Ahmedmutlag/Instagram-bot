@@ -38,6 +38,7 @@ export default function ProviderDetailPage() {
   const [deletingMapped, setDeletingMapped] = useState<ProviderService | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [bulkImporting, setBulkImporting] = useState(false);
 
   const loadProvider = useCallback(() => {
     setLoading(true);
@@ -85,6 +86,21 @@ export default function ProviderDetailPage() {
       toast.error(getErrorMessage(err));
     } finally {
       setTesting(false);
+    }
+  }
+
+  async function handleBulkImport() {
+    setBulkImporting(true);
+    try {
+      const result = await api.post<{ imported: number; skipped: number }>(
+        `/providers/${providerId}/mapped-services/bulk-import`
+      );
+      toast.success(`تم استيراد ${result.imported} خدمة${result.skipped ? ` (تم تجاهل ${result.skipped} مستوردة مسبقاً أو غير صالحة)` : ""}`);
+      loadMapped();
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setBulkImporting(false);
     }
   }
 
@@ -139,9 +155,14 @@ export default function ProviderDetailPage() {
               <h2 className="text-base font-bold text-slate-800">
                 إدارة خدمات المزود
               </h2>
-              <Button variant="secondary" size="sm" onClick={loadRemote} loading={remoteLoading}>
-                جلب الخدمات من المزود
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="secondary" size="sm" onClick={loadRemote} loading={remoteLoading}>
+                  جلب الخدمات من المزود
+                </Button>
+                <Button size="sm" onClick={handleBulkImport} loading={bulkImporting}>
+                  استيراد الكل
+                </Button>
+              </div>
             </div>
 
             {remoteError && (

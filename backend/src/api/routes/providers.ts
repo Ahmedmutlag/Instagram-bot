@@ -89,6 +89,22 @@ providersRouter.get(
   })
 );
 
+providersRouter.post(
+  "/:id/mapped-services/bulk-import",
+  asyncHandler(async (req: AuthedRequest, res) => {
+    const result = await providerService.bulkImportProviderServices(req.params.id);
+    await recordAudit({
+      adminId: req.admin!.adminId,
+      action: "PROVIDER_SERVICE_BULK_IMPORT",
+      entityType: "Provider",
+      entityId: req.params.id,
+      newValue: result,
+      ipAddress: req.ip,
+    });
+    res.json({ data: result });
+  })
+);
+
 const mappedServiceSchema = z.object({
   externalServiceId: z.string().min(1),
   name: z.string().min(1),
