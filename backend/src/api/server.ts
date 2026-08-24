@@ -4,6 +4,11 @@ import { logger } from "../lib/logger";
 
 const app = createApp();
 
-app.listen(env.API_PORT, () => {
-  logger.info(`Admin API listening on port ${env.API_PORT}`);
+// Platforms like Render assign the port to listen on via the PORT env var
+// and health-check it directly; fall back to our own API_PORT for local
+// dev / docker-compose where nothing sets PORT.
+const port = Number(process.env.PORT) || env.API_PORT;
+
+app.listen(port, () => {
+  logger.info(`Admin API listening on port ${port}`);
 });
