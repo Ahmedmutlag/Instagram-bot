@@ -96,6 +96,21 @@ servicesRouter.post(
   })
 );
 
+servicesRouter.post(
+  "/translate-names",
+  asyncHandler(async (req: AuthedRequest, res) => {
+    const result = await serviceCatalog.bulkTranslateServiceNames();
+    await recordAudit({
+      adminId: req.admin!.adminId,
+      action: "SERVICE_BULK_TRANSLATE_NAMES",
+      entityType: "Service",
+      newValue: result,
+      ipAddress: req.ip,
+    });
+    res.json({ data: result });
+  })
+);
+
 servicesRouter.patch(
   "/:id",
   validateBody(serviceSchema.partial()),

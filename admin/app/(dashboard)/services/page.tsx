@@ -56,6 +56,7 @@ export default function ServicesPage() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [generateOpen, setGenerateOpen] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [translating, setTranslating] = useState(false);
 
   function load() {
     setLoading(true);
@@ -108,6 +109,19 @@ export default function ServicesPage() {
     }
   }
 
+  async function handleTranslateNames() {
+    setTranslating(true);
+    try {
+      const result = await api.post<{ translated: number }>("/services/translate-names", {});
+      toast.success(`تمت ترجمة أسماء ${result.translated} خدمة إلى العربية`);
+      load();
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setTranslating(false);
+    }
+  }
+
   return (
     <div>
       <PageHeader
@@ -117,6 +131,9 @@ export default function ServicesPage() {
           <div className="flex flex-wrap gap-2">
             <Button variant="secondary" onClick={() => setGenerateOpen(true)}>
               توليد خدمات تلقائياً
+            </Button>
+            <Button variant="secondary" loading={translating} onClick={handleTranslateNames}>
+              ترجمة الأسماء للعربي
             </Button>
             <Button variant="danger" onClick={() => setBulkDeleteOpen(true)}>
               حذف الكل ما عدا...

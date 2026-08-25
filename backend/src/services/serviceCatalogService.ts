@@ -2,6 +2,7 @@ import { ServiceStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { AppError } from "../utils/errors";
 import { toNumber } from "../utils/money";
+import { translateServiceName } from "../utils/serviceNameTranslator";
 
 export interface CreateServiceInput {
   name: string;
@@ -155,8 +156,8 @@ export async function bulkGenerateServicesFromProvider(providerId: string, marku
 
   const result = await prisma.service.createMany({
     data: candidates.map((m) => ({
-      name: m.name,
-      category: m.category,
+      name: translateServiceName(m.name),
+      category: m.category ? translateServiceName(m.category) : m.category,
       providerId,
       providerServiceId: m.id,
       price: Number((toNumber(m.costPrice) * (1 + markupPercent / 100)).toFixed(4)),
@@ -167,6 +168,36 @@ export async function bulkGenerateServicesFromProvider(providerId: string, marku
   });
 
   return { created: result.count, skipped: mappedServices.length - result.count };
+}
+
+/**
+ * Re-translates every sellable Service's name/category into Arabic from its
+ * source ProviderService (the original remote provider text), so re-running
+ * this is always idempotent even if it's called more than once.
+ */
+export async function bulkTranslateServiceNames() {
+  const services = await prisma.service.findMany({
+    select: { id: true, providerService: { select: { name: true, category: true } } },
+  });
+
+  const updates = services
+    .map((s) => ({
+      id: s.id,
+      name: translateServiceName(s.providerService.name),
+      category: s.providerService.category ? translateServiceName(s.providerService.category) : null,
+    }))
+    .filter((u) => u.name.trim().length > 0);
+
+  await prisma.$transaction(
+    updates.map((u) =>
+      prisma.service.update({
+        where: { id: u.id },
+        data: { name: u.name, ...(u.category ? { category: u.category } : {}) },
+      })
+    )
+  );
+
+  return { translated: updates.length };
 }
 
 /**
