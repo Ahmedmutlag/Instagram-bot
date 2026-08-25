@@ -88,8 +88,6 @@ export function registerMenuHandlers(bot: Telegraf<BotContext>) {
     );
   });
 
-  bot.hears(MENU_LABELS.SUPPORT, async (ctx) => {
-    const support = await getSetting(SETTINGS_KEYS.SUPPORT_USERNAME);
-    await ctx.reply(`📞 للتواصل مع الدعم الفني تواصل معنا عبر: ${support}`);
-  });
+  // "الدعم" is now handled by supportFlow.ts (relays messages to the admin
+  // via the bot itself instead of pointing users at a separate account).
 }

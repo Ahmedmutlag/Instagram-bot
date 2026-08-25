@@ -15,7 +15,7 @@ export interface DepositWizardData {
 }
 
 export interface WizardState {
-  type: "order" | "deposit" | "coupon_check";
+  type: "order" | "deposit" | "coupon_check" | "support";
   step: string;
   data: OrderWizardData & DepositWizardData;
 }

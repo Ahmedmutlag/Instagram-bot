@@ -7,6 +7,7 @@ import { registerMenuHandlers } from "./handlers/menu";
 import { registerOrderHandlers, handleOrderWizardText } from "./handlers/orderFlow";
 import { registerDepositHandlers, handleDepositWizardText } from "./handlers/depositFlow";
 import { registerCouponHandlers, handleCouponWizardText } from "./handlers/couponFlow";
+import { registerSupportHandlers, handleSupportWizardText } from "./handlers/supportFlow";
 import { requireActiveUser } from "../services/userService";
 import { AppError } from "../utils/errors";
 
@@ -39,6 +40,7 @@ export function createBot() {
   registerOrderHandlers(bot);
   registerDepositHandlers(bot);
   registerCouponHandlers(bot);
+  registerSupportHandlers(bot);
 
   bot.on("text", async (ctx) => {
     const wizard = ctx.session.wizard;
@@ -50,6 +52,7 @@ export function createBot() {
     if (wizard.type === "order") return handleOrderWizardText(ctx, wizard, text);
     if (wizard.type === "deposit") return handleDepositWizardText(ctx, wizard, text);
     if (wizard.type === "coupon_check") return handleCouponWizardText(ctx, wizard, text);
+    if (wizard.type === "support") return handleSupportWizardText(ctx, wizard, text);
   });
 
   bot.catch((err, ctx) => {
